@@ -36,3 +36,4 @@ keyboard.txt
 # uv
 .uv/
 .sample/
+oracle_history.jsonl
