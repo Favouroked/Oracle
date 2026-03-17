@@ -131,9 +131,6 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             
             if preview_context:
                 console.print(Panel(ocr_result.text, title="OCR Context Preview", border_style="dim"))
-                # if not click.confirm("Proceed with LLM query?"):
-                #     WindowCapturer.cleanup(screenshot)
-                #     return
 
             # 5. Build prompt and query LLM
             progress.update(task, description=f"Querying Ollama ({model})...")
