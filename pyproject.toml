@@ -1,0 +1,23 @@
+[project]
+name = "oracle"
+version = "0.1.0"
+description = "Oracle AI: Local-first window context assistant"
+requires-python = ">=3.13"
+dependencies = [
+    "click>=8.3.1",
+    "ollama>=0.6.1",
+    "pillow>=12.1.1",
+    "pydantic>=2.12.5",
+    "pynput>=1.8.1",
+    "pyobjc-framework-cocoa>=12.1",
+    "pyobjc-framework-quartz>=12.1",
+    "pyobjc-framework-vision>=12.1",
+    "rich>=14.3.3",
+]
+
+[project.scripts]
+oracle = "oracle.main:cli"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
