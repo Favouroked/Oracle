@@ -1,4 +1,5 @@
 import click
+import time
 from typing import Optional
 from rich.console import Console
 from rich.table import Table
@@ -197,9 +198,11 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             ocr_result = None
             if not use_vision:
                 # 4a. OCR
+                start_ocr = time.time()
                 progress.update(task, description="Running OCR...")
                 ocr_result = VisionOCR.extract_text(screenshot.image_path)
-                progress.update(task, description=f"OCR finished (Confidence: {ocr_result.confidence:.2f}).")
+                ocr_duration = time.time() - start_ocr
+                progress.update(task, description=f"OCR finished in {ocr_duration:.2f}s (Confidence: {ocr_result.confidence:.2f}).")
             else:
                 progress.update(task, description=f"Using vision ({model}), skipping OCR.")
                 ocr_result = OCRResult(text="", confidence=1.0, has_text=False)
@@ -223,10 +226,10 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                 prompt, 
                 image_path=screenshot.image_path if use_vision else None
             )
-            progress.update(task, description="LLM query finished.")
+            progress.update(task, description=f"LLM query finished in {llm_response.total_duration_seconds:.2f}s.")
 
         # 6. Print answer
-        console.print("\n", Panel(llm_response.answer, title=f"Oracle Answer ({model})", border_style="green"))
+        console.print("\n", Panel(llm_response.answer, title=f"Oracle Answer ({model})", subtitle=f"Time: {llm_response.total_duration_seconds:.2f}s", border_style="green"))
 
         # 7. Log interaction
         logger = InteractionLogger(log_path=log_path)
@@ -237,7 +240,8 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             ocr_text_excerpt=ocr_result.text[:500] + "..." if len(ocr_result.text) > 500 else ocr_result.text,
             response=llm_response.answer,
             auto_typing_requested=type_output,
-            status="success"
+            status="success",
+            total_duration_seconds=llm_response.total_duration_seconds
         )
         logger.log(log_entry)
         
@@ -296,11 +300,13 @@ def preview_context_cmd(window_id, window_index, select, image_path, latest_scre
                 progress.update(task, description=f"Using image: {screenshot.image_path}")
 
             extracted_text = ""
+            start_time = time.time()
             if method == "apple-vision":
                 progress.update(task, description="Running Apple Vision OCR...")
                 ocr_result = VisionOCR.extract_text(screenshot.image_path)
                 extracted_text = ocr_result.text
-                progress.update(task, description=f"OCR finished (Confidence: {ocr_result.confidence:.2f}).")
+                duration = time.time() - start_time
+                progress.update(task, description=f"OCR finished in {duration:.2f}s (Confidence: {ocr_result.confidence:.2f}).")
             else:
                 progress.update(task, description=f"Querying vision model ({model}) for OCR...")
                 client = OllamaClient(model_name=model)
@@ -310,10 +316,15 @@ def preview_context_cmd(window_id, window_index, select, image_path, latest_scre
                 prompt = "Transcribe all the text visible in this image. Output only the transcribed text, nothing else. If there is no text, output an empty string."
                 llm_response = client.query(prompt, image_path=screenshot.image_path)
                 extracted_text = llm_response.answer
-                progress.update(task, description="Vision model OCR finished.")
+                progress.update(task, description=f"Vision model OCR finished in {llm_response.total_duration_seconds:.2f}s.")
 
         if extracted_text:
-            console.print("\n", Panel(extracted_text, title=f"Extracted Context ({method})", border_style="dim"))
+            title = f"Extracted Context ({method})"
+            if method == "vision-model":
+                title += f" - {llm_response.total_duration_seconds:.2f}s"
+            else:
+                title += f" - {duration:.2f}s"
+            console.print("\n", Panel(extracted_text, title=title, border_style="dim"))
         else:
             console.print("\n[yellow]No text could be extracted.[/yellow]")
 

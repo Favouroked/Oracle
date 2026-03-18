@@ -24,6 +24,7 @@ class LLMResponse(BaseModel):
     answer: str = Field(..., description="Answer from the local LLM")
     model: str = Field(..., description="Name of the model used")
     timestamp: datetime = Field(default_factory=datetime.now)
+    total_duration_seconds: float = Field(0.0, description="Total time taken for the LLM request in seconds")
 
 class InteractionLog(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
@@ -34,4 +35,5 @@ class InteractionLog(BaseModel):
     response: str
     auto_typing_requested: bool
     status: str
+    total_duration_seconds: float = Field(0.0, description="Total time taken for the LLM request in seconds")
     error_message: Optional[str] = None

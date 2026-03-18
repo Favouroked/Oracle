@@ -25,10 +25,15 @@ class OllamaClient:
             answer = response.get('message', {}).get('content', '')
             if not answer:
                 raise RuntimeError("Empty response from Ollama.")
+            
+            # Ollama provides duration in nanoseconds
+            total_duration_ns = response.get('total_duration', 0)
+            total_duration_seconds = total_duration_ns / 1_000_000_000.0 if total_duration_ns else 0.0
                 
             return LLMResponse(
                 answer=answer,
-                model=self.model_name
+                model=self.model_name,
+                total_duration_seconds=total_duration_seconds
             )
         except Exception as e:
             # Re-raise as RuntimeError for consistency
