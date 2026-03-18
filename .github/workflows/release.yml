@@ -1,0 +1,32 @@
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create release archive
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          # Create a clean archive with only necessary files
+          mkdir -p oracle-$VERSION
+          cp -r oracle install.sh pyproject.toml README.md LICENSE oracle-$VERSION/
+          tar -czvf oracle-$VERSION.tar.gz oracle-$VERSION
+          zip -r oracle-$VERSION.zip oracle-$VERSION
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            oracle-*.tar.gz
+            oracle-*.zip
+          generate_release_notes: true

@@ -17,21 +17,36 @@ Oracle is a local-first Python CLI tool designed for macOS. It uses native macOS
 
 #### Setup Instructions
 
-1.  **Clone the Repository:**
+1.  **One-liner (Easiest):**
+    Install Oracle directly without cloning the repository:
     ```bash
-    git clone <repository-url>
-    cd Oracle
+    curl -fsSL https://raw.githubusercontent.com/Favouroked/Oracle/main/scripts/install-remote.sh | bash
     ```
+    This will automatically download the latest release and run the installer.
 
-2.  **Global Installation (Recommended):**
-    For a global installation that can be accessed from any terminal instance, run the provided installation script:
+    > **Prefer to inspect before running?**
+    > ```bash
+    > curl -fsSL https://raw.githubusercontent.com/Favouroked/Oracle/main/scripts/install-remote.sh -o install.sh
+    > less install.sh   # review it
+    > bash install.sh
+    > ```
+
+2.  **Download & Extract from GitHub Releases:**
+    Download the latest release archive from the [Releases page](https://github.com/Favouroked/Oracle/releases), then:
     ```bash
-    chmod +x install.sh
+    tar -xzf oracle-v*.tar.gz
+    cd oracle-v*/
     ./install.sh
     ```
-    This script will create a dedicated virtual environment in `~/.oracle-ai` and link the `oracle` command to your global path (e.g., `/usr/local/bin` or `~/.local/bin`).
 
-3.  **Local Installation (Using uv):**
+3.  **Clone the Repository:**
+    ```bash
+    git clone https://github.com/Favouroked/oracle.git
+    cd oracle
+    ./install.sh
+    ```
+
+4.  **Local Installation (Using uv):**
     If you prefer to use `uv` directly:
     ```bash
     uv sync
