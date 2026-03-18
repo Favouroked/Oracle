@@ -69,7 +69,7 @@ def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
 
 @cli.command(name="ask")
 @click.argument("question", required=False)
-@click.option("--model", default="llama3", help="Ollama model name.")
+@click.option("--model", default="qwen3.5:9b", help="Ollama model name.")
 @click.option("--window-id", type=int, help="Target window ID.")
 @click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
 @click.option("--select", is_flag=True, help="Interactively select a window.")

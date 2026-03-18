@@ -3,7 +3,7 @@ from typing import Optional
 from oracle.models.data_models import LLMResponse
 
 class OllamaClient:
-    def __init__(self, model_name: str = "llama3"):
+    def __init__(self, model_name: str = "qwen3.5:9b"):
         self.model_name = model_name
 
     def query(self, prompt: str, image_path: Optional[str] = None) -> LLMResponse:
