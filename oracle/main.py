@@ -218,7 +218,7 @@ def get_target_source(window_id, window_index, select, image_path, latest_screen
 
 @cli.command(name="ask")
 @click.argument("question", required=False)
-@click.option("--model", default="qwen3.5:9b", help="Ollama model name.")
+@click.option("--model", default="qwen3.5:4b", help="Ollama model name.")
 @click.option("--window-id", type=int, help="Target window ID.")
 @click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
 @click.option("--select", is_flag=True, help="Interactively select a window.")
@@ -373,7 +373,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
 @click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
 @click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
 @click.option("--method", type=click.Choice(["apple-vision", "vision-model"]), default="apple-vision", help="OCR method to use.")
-@click.option("--model", default="llava:7b", help="Vision model to use if method is 'vision-model'.")
+@click.option("--model", default="qwen3.5:4b", help="Vision model to use if method is 'vision-model'.")
 def preview_context_cmd(window_id, window_index, select, image_path, latest_screenshot, method, model):
     """Preview the text context extracted from a window or image."""
     target_window, screenshot = get_target_source(window_id, window_index, select, image_path, latest_screenshot)
@@ -433,7 +433,7 @@ def preview_context_cmd(window_id, window_index, select, image_path, latest_scre
               default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
               help="End date/time for filtering (default: now). Format: YYYY-MM-DD [HH:MM:SS]")
 @click.option("--thread-id", help="Filter by specific thread ID.")
-@click.option("--log-path", default="oracle_history.jsonl", help="Path to the history log file.")
+@click.option("--log-path", default=os.path.expanduser("~/.oracle-ai/oracle_history.jsonl"), help="Path to the history log file.")
 def view_history_cmd(from_date, to_date, thread_id, log_path):
     """View interaction history with filters."""
     logger = InteractionLogger(log_path=log_path)

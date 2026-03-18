@@ -41,7 +41,7 @@ The primary command for asking questions based on a window's content.
 
 -   **Options:**
     -   `"QUESTION"` (argument): Your question for the LLM.
-    -   `--model [MODEL_NAME]`: Specify which Ollama model to use. (Default: `llama3`)
+    -   `--model [MODEL_NAME]`: Specify which Ollama model to use. (Default: `qwen3.5:9b`)
     -   `--window-id [ID]`: Select the target window by its ID.
     -   `--window-index [INDEX]`: Select the target window by its index from `list-windows`.
     -   `--select`: Force interactive window selection even if IDs are available.
@@ -49,7 +49,9 @@ The primary command for asking questions based on a window's content.
     -   `--latest-screenshot` or `--last-screenshot`: Use the most recent screenshot from the Desktop.
     -   `--preview-context`: Display the text extracted from OCR before sending it to the model.
     -   `--type-output`: Ask the model for an answer and then offer to auto-type it back into the selected window.
-    -   `--log-path [PATH]`: Customize the location of the history log. (Default: `oracle_history.jsonl`)
+    -   `--force-ocr`: Force OCR extraction even if the model supports vision.
+    -   `--log-path [PATH]`: Customize the location of the history log. (Default: `~/.oracle-ai/oracle_history.jsonl`)
+    -   `--thread`: Enable interactive follow-up questions (chat threading).
     -   `--verbose`: Show additional debug information during execution.
 
 ---
@@ -62,6 +64,13 @@ List all available local Ollama models and indicate if they support vision (imag
     ```bash
     oracle list-models
     ```
+-   **Output:**
+    A table containing:
+    -   `Model Name`: Name of the model in Ollama.
+    -   `Vision`: Indicates if the model supports image-to-text (vision).
+    -   `Family`: The model family (e.g., llama, qwen).
+    -   `Params`: Number of parameters.
+    -   `Size`: File size on disk.
 
 ---
 
@@ -81,7 +90,38 @@ Preview the text context extracted from a window, image, or screenshot without a
     -   `--image-path [PATH]`: Manual path to an image file.
     -   `--latest-screenshot` or `--last-screenshot`: Use the most recent screenshot from the Desktop.
     -   `--method [apple-vision | vision-model]`: Choose the OCR method (Default: `apple-vision`).
-    -   `--model [MODEL_NAME]`: Specify the vision model to use if method is `vision-model`.
+    -   `--model [MODEL_NAME]`: Specify the vision model to use if method is `vision-model`. (Default: `llava:7b`)
+
+---
+
+#### 5. `view-history`
+
+View interaction history with filters.
+
+-   **Usage:**
+    ```bash
+    oracle view-history [OPTIONS]
+    ```
+
+-   **Options:**
+    -   `--from [TIMESTAMP]`: Start date/time for filtering (Default: 24h ago). Format: `YYYY-MM-DD [HH:MM:SS]`
+    -   `--to [TIMESTAMP]`: End date/time for filtering (Default: now). Format: `YYYY-MM-DD [HH:MM:SS]`
+    -   `--thread-id [ID]`: Filter by a specific thread ID.
+    -   `--log-path [PATH]`: Path to the history log file. (Default: `~/.oracle-ai/oracle_history.jsonl`)
+
+-   **Output:**
+    A table of past interactions including timestamps, app names, questions asked, status, and thread IDs. If only one result is found, the full model response is displayed.
+
+---
+
+#### 6. `uninstall`
+
+Uninstall Oracle AI from your system. This removes the installation directory and the `oracle` symlink.
+
+-   **Usage:**
+    ```bash
+    oracle uninstall
+    ```
 
 ---
 
@@ -102,7 +142,7 @@ Preview the text context extracted from a window, image, or screenshot without a
 
 #### Logging
 
-Oracle keeps a record of every interaction in a JSONL file (default: `oracle_history.jsonl`). Each entry includes:
+Oracle keeps a record of every interaction in a JSONL file (default: `~/.oracle-ai/oracle_history.jsonl`). Each entry includes:
 -   Timestamp
 -   Selected window metadata
 -   The original question
