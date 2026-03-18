@@ -4,6 +4,7 @@ import os
 import shutil
 import sys
 import uuid
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 from rich.console import Console
@@ -224,7 +225,7 @@ def get_target_source(window_id, window_index, select, image_path, latest_screen
 @click.option("--preview-context", is_flag=True, help="Preview OCR text before LLM query.")
 @click.option("--type-output", is_flag=True, help="Enable auto-typing the result back into the window.")
 @click.option("--force-ocr", is_flag=True, help="Force OCR even if the model supports vision.")
-@click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
+@click.option("--log-path", default=os.path.expanduser("~/.oracle-ai/oracle_history.jsonl"), help="Path to history log.")
 @click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
 @click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
 @click.option("--thread", is_flag=True, help="Continue the chat based on the LLM's reply.")
@@ -423,6 +424,59 @@ def preview_context_cmd(window_id, window_index, select, image_path, latest_scre
 
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
+
+@cli.command(name="view-history")
+@click.option("--from", "from_date", type=click.DateTime(formats=["%Y-%m-%d", "%Y-%m-%d %H:%M:%S"]), 
+              default=lambda: (datetime.now() - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S"),
+              help="Start date/time for filtering (default: 24h ago). Format: YYYY-MM-DD [HH:MM:SS]")
+@click.option("--to", "to_date", type=click.DateTime(formats=["%Y-%m-%d", "%Y-%m-%d %H:%M:%S"]), 
+              default=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+              help="End date/time for filtering (default: now). Format: YYYY-MM-DD [HH:MM:SS]")
+@click.option("--thread-id", help="Filter by specific thread ID.")
+@click.option("--log-path", default="oracle_history.jsonl", help="Path to the history log file.")
+def view_history_cmd(from_date, to_date, thread_id, log_path):
+    """View interaction history with filters."""
+    logger = InteractionLogger(log_path=log_path)
+    history = logger.get_history(from_dt=from_date, to_dt=to_date, thread_id=thread_id)
+    
+    if not history:
+        console.print("[yellow]No history entries found matching the criteria.[/yellow]")
+        return
+
+    table = Table(title=f"Oracle Interaction History ({from_date} to {to_date})", show_lines=True)
+    table.add_column("Timestamp", style="cyan", no_wrap=True)
+    table.add_column("App/Window", style="magenta")
+    table.add_column("Question", style="green")
+    table.add_column("Status", justify="center")
+    table.add_column("Thread ID", style="dim")
+    table.add_column("Response", justify="center")
+
+    for entry in history:
+        app_info = entry.window_info.app_name if entry.window_info else "N/A"
+        status_style = "green" if entry.status == "success" else "red"
+        status_mark = f"[{status_style}]{entry.status}[/{status_style}]"
+        
+        # Truncate question for table view
+        question_display = entry.question[:50] + "..." if len(entry.question) > 50 else entry.question
+        
+        table.add_row(
+            entry.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
+            app_info,
+            question_display,
+            status_mark,
+            entry.thread_id or "-",
+            entry.response or "-",
+        )
+
+    console.print(table)
+    
+    if len(history) == 1:
+        # If only one entry, show the full details
+        entry = history[0]
+        console.print("\n", Panel(entry.response or entry.error_message or "No response", 
+                                title=f"Full Response/Error - {entry.timestamp}", 
+                                subtitle=f"Model: {entry.model}",
+                                border_style="green" if entry.status == "success" else "red"))
 
 if __name__ == "__main__":
     cli()

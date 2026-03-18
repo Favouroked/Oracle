@@ -40,6 +40,25 @@ fi
 
 echo "Found Python $PYTHON_VERSION."
 
+# Check for Ollama
+if ! command -v ollama &> /dev/null; then
+    echo ""
+    echo "WARNING: Ollama is not installed."
+    echo "Oracle requires Ollama to run LLM inference locally."
+    read -p "Would you like to install Ollama now? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        echo "Installing Ollama..."
+        curl -fsSL https://ollama.com/install.sh | sh
+    else
+        echo "Skipping Ollama installation."
+        echo "Please install Ollama manually from: https://ollama.com/download"
+    fi
+else
+    OLLAMA_VERSION=$(ollama --version 2>/dev/null || echo "unknown")
+    echo "Found Ollama: $OLLAMA_VERSION"
+fi
+
 # Create installation directory
 if [ -d "$INSTALL_DIR" ]; then
     echo "Existing installation found at $INSTALL_DIR. Updating..."
@@ -71,3 +90,21 @@ echo "Success! Oracle AI has been installed."
 echo "You can now run 'oracle' from any terminal."
 echo "To uninstall, run: oracle uninstall"
 echo "========================================"
+
+# Check if default model is available and offer to pull if not
+if command -v ollama &> /dev/null; then
+    DEFAULT_MODEL="qwen3.5:4b"
+    if ollama list 2>/dev/null | grep -q "^$DEFAULT_MODEL"; then
+        echo "Default model '$DEFAULT_MODEL' is already available."
+    else
+        echo ""
+        read -p "Default model '$DEFAULT_MODEL' not found. Would you like to pull it now? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Pulling $DEFAULT_MODEL model (this may take a while)..."
+            ollama pull $DEFAULT_MODEL
+        else
+            echo "Skipping model download. You can pull it later with: ollama pull $DEFAULT_MODEL"
+        fi
+    fi
+fi
