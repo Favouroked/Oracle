@@ -11,7 +11,7 @@ from oracle.llm.ollama_client import OllamaClient
 from oracle.llm.prompt_builder import PromptBuilder
 from oracle.history.interaction_logger import InteractionLogger
 from oracle.typing.injector import OutputInjector
-from oracle.models.data_models import InteractionLog, WindowInfo, OCRResult
+from oracle.models.data_models import InteractionLog, WindowInfo, OCRResult, ScreenshotResult
 
 console = Console()
 
@@ -77,51 +77,69 @@ def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
 @click.option("--type-output", is_flag=True, help="Enable auto-typing the result back into the window.")
 @click.option("--force-ocr", is_flag=True, help="Force OCR even if the model supports vision.")
 @click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
+@click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
+@click.option("--latest-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, verbose):
-    """Ask a question about a window's content."""
+def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, image_path, latest_screenshot, verbose):
+    """Ask a question about a window's content or an image."""
     
     # 1. Get the question if not provided as argument
     if not question:
         question = click.prompt("Enter your question")
         
-    # 2. Identify the target window
-    windows = WindowEnumerator.get_active_windows()
+    # 2. Identify the target source
+    screenshot = None
     target_window = None
-    
-    if window_id:
-        for w in windows:
-            if w.window_id == window_id:
-                target_window = w
-                break
+
+    if image_path:
+        screenshot = ScreenshotResult(
+            image_path=image_path,
+            window_info=None,
+            is_temporary=False
+        )
+    elif latest_screenshot:
+        screenshot = WindowCapturer.get_latest_desktop_screenshot()
+    else:
+        # Window-based capture
+        windows = WindowEnumerator.get_active_windows()
+        
+        if window_id:
+            for w in windows:
+                if w.window_id == window_id:
+                    target_window = w
+                    break
+            if not target_window:
+                console.print(f"[red]Window ID {window_id} not found.[/red]")
+                return
+        elif window_index is not None:
+            if 0 <= window_index < len(windows):
+                target_window = windows[window_index]
+            else:
+                console.print(f"[red]Window index {window_index} out of range.[/red]")
+                return
+        elif select or not (window_id or window_index):
+            if not windows:
+                console.print("[red]No active windows found to select from.[/red]")
+                return
+            target_window = select_window_interactively(windows)
+            
         if not target_window:
-            console.print(f"[red]Window ID {window_id} not found.[/red]")
+            console.print("[red]No window selected.[/red]")
             return
-    elif window_index is not None:
-        if 0 <= window_index < len(windows):
-            target_window = windows[window_index]
-        else:
-            console.print(f"[red]Window index {window_index} out of range.[/red]")
-            return
-    elif select or not (window_id or window_index):
-        if not windows:
-            console.print("[red]No active windows found to select from.[/red]")
-            return
-        target_window = select_window_interactively(windows)
-        
-    if not target_window:
-        console.print("[red]No window selected.[/red]")
-        return
-        
-    console.print(f"\n[bold blue]Selected Window:[/bold blue] {target_window.app_name} - {target_window.title or 'No Title'}")
+            
+        console.print(f"\n[bold blue]Selected Window:[/bold blue] {target_window.app_name} - {target_window.title or 'No Title'}")
 
     try:
-        # 3. Capture screenshot
+        # 3. Get the screenshot (either existing or capture it)
         with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-            task = progress.add_task("Capturing window...", total=None)
-            screenshot = WindowCapturer.capture_window(target_window)
-            progress.update(task, description="Screenshot captured.")
-            
+            if not screenshot:
+                task = progress.add_task("Capturing window...", total=None)
+                screenshot = WindowCapturer.capture_window(target_window)
+                progress.update(task, description="Window captured.")
+            else:
+                task = progress.add_task("Loading image context...", total=None)
+                progress.update(task, description=f"Using image: {screenshot.image_path}")
+
             # 4. Determine if we should use vision or OCR
             client = OllamaClient(model_name=model)
             use_vision = client.is_vision_model() and not force_ocr
@@ -137,7 +155,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                 ocr_result = OCRResult(text="", confidence=1.0, has_text=False)
 
             if not ocr_result.has_text and not use_vision:
-                console.print("[yellow]Warning: Little or no text was extracted from the window.[/yellow]")
+                console.print("[yellow]Warning: Little or no text was extracted from the source image.[/yellow]")
             
             if preview_context and ocr_result.text:
                 console.print(Panel(ocr_result.text, title="OCR Context Preview", border_style="dim"))
@@ -147,7 +165,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             prompt = PromptBuilder.build_prompt(
                 question, 
                 ocr_result.text, 
-                target_window, 
+                target_window or screenshot.window_info, 
                 has_image=use_vision
             )
             
@@ -163,7 +181,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
         # 7. Log interaction
         logger = InteractionLogger(log_path=log_path)
         log_entry = InteractionLog(
-            window_info=target_window,
+            window_info=target_window or screenshot.window_info,
             question=question,
             model=model,
             ocr_text_excerpt=ocr_result.text[:500] + "..." if len(ocr_result.text) > 500 else ocr_result.text,
@@ -173,33 +191,35 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
         )
         logger.log(log_entry)
         
-        # 8. Cleanup screenshot
+        # 8. Cleanup screenshot if temporary
         WindowCapturer.cleanup(screenshot)
         
-        # 9. Optional auto-typing
-        if type_output:
+        # 9. Optional auto-typing (only if we have a target window)
+        if type_output and (target_window or screenshot.window_info):
+            win = target_window or screenshot.window_info
             injector = OutputInjector()
-            injector.confirm_and_type(llm_response.answer, target_window.app_name)
+            injector.confirm_and_type(llm_response.answer, win.app_name)
+        elif type_output:
+            console.print("[yellow]Warning: Auto-typing requested but no target window is available.[/yellow]")
 
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
         # Log failure if we have enough info
-        if 'target_window' in locals() and target_window:
-            try:
-                logger = InteractionLogger(log_path=log_path)
-                log_entry = InteractionLog(
-                    window_info=target_window,
-                    question=question,
-                    model=model,
-                    ocr_text_excerpt="",
-                    response="",
-                    auto_typing_requested=type_output,
-                    status="error",
-                    error_message=str(e)
-                )
-                logger.log(log_entry)
-            except:
-                pass
+        try:
+            logger = InteractionLogger(log_path=log_path)
+            log_entry = InteractionLog(
+                window_info=target_window or (screenshot.window_info if screenshot else None),
+                question=question,
+                model=model,
+                ocr_text_excerpt="",
+                response="",
+                auto_typing_requested=type_output,
+                status="error",
+                error_message=str(e)
+            )
+            logger.log(log_entry)
+        except:
+            pass
 
 if __name__ == "__main__":
     cli()

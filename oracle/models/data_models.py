@@ -16,8 +16,9 @@ class OCRResult(BaseModel):
 
 class ScreenshotResult(BaseModel):
     image_path: str = Field(..., description="Path to the captured screenshot file")
-    window_info: WindowInfo = Field(..., description="Metadata of the captured window")
+    window_info: Optional[WindowInfo] = Field(None, description="Metadata of the captured window")
     timestamp: datetime = Field(default_factory=datetime.now)
+    is_temporary: bool = Field(True, description="True if the file was created for this session and should be cleaned up")
 
 class LLMResponse(BaseModel):
     answer: str = Field(..., description="Answer from the local LLM")
@@ -26,7 +27,7 @@ class LLMResponse(BaseModel):
 
 class InteractionLog(BaseModel):
     timestamp: datetime = Field(default_factory=datetime.now)
-    window_info: WindowInfo
+    window_info: Optional[WindowInfo] = None
     question: str
     model: str
     ocr_text_excerpt: str

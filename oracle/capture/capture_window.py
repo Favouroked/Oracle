@@ -30,7 +30,8 @@ class WindowCapturer:
             return ScreenshotResult(
                 image_path=image_path,
                 window_info=window,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
+                is_temporary=True
             )
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"screencapture failed with error: {e.stderr}") from e
@@ -38,10 +39,43 @@ class WindowCapturer:
             raise RuntimeError(f"An unexpected error occurred during capture: {e}") from e
 
     @staticmethod
+    def get_latest_desktop_screenshot() -> ScreenshotResult:
+        """
+        Finds the latest screenshot file in the macOS Desktop folder.
+        """
+        desktop_path = os.path.expanduser("~/Desktop")
+        if not os.path.exists(desktop_path):
+            raise RuntimeError(f"Desktop folder not found at: {desktop_path}")
+
+        # Common screenshot formats on macOS
+        extensions = (".png", ".jpg", ".jpeg")
+        files = [
+            os.path.join(desktop_path, f) 
+            for f in os.listdir(desktop_path) 
+            if f.lower().endswith(extensions)
+        ]
+
+        if not files:
+            raise RuntimeError(f"No screenshots found in {desktop_path}")
+
+        # Sort by modification time
+        latest_file = max(files, key=os.path.getmtime)
+        
+        return ScreenshotResult(
+            image_path=latest_file,
+            window_info=None,
+            timestamp=datetime.fromtimestamp(os.path.getmtime(latest_file)),
+            is_temporary=False
+        )
+
+    @staticmethod
     def cleanup(screenshot_result: ScreenshotResult):
         """
-        Removes the screenshot file from disk.
+        Removes the screenshot file from disk if it's marked as temporary.
         """
+        if not screenshot_result.is_temporary:
+            return
+
         try:
             if os.path.exists(screenshot_result.image_path):
                 os.remove(screenshot_result.image_path)
