@@ -11,7 +11,7 @@ from oracle.llm.ollama_client import OllamaClient
 from oracle.llm.prompt_builder import PromptBuilder
 from oracle.history.interaction_logger import InteractionLogger
 from oracle.typing.injector import OutputInjector
-from oracle.models.data_models import InteractionLog, WindowInfo
+from oracle.models.data_models import InteractionLog, WindowInfo, OCRResult
 
 console = Console()
 
@@ -75,9 +75,10 @@ def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
 @click.option("--select", is_flag=True, help="Interactively select a window.")
 @click.option("--preview-context", is_flag=True, help="Preview OCR text before LLM query.")
 @click.option("--type-output", is_flag=True, help="Enable auto-typing the result back into the window.")
+@click.option("--force-ocr", is_flag=True, help="Force OCR even if the model supports vision.")
 @click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, log_path, verbose):
+def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, verbose):
     """Ask a question about a window's content."""
     
     # 1. Get the question if not provided as argument
@@ -121,23 +122,39 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             screenshot = WindowCapturer.capture_window(target_window)
             progress.update(task, description="Screenshot captured.")
             
-            # 4. OCR
-            progress.update(task, description="Running OCR...")
-            ocr_result = VisionOCR.extract_text(screenshot.image_path)
-            progress.update(task, description=f"OCR finished (Confidence: {ocr_result.confidence:.2f}).")
+            # 4. Determine if we should use vision or OCR
+            client = OllamaClient(model_name=model)
+            use_vision = client.is_vision_model() and not force_ocr
+            
+            ocr_result = None
+            if not use_vision:
+                # 4a. OCR
+                progress.update(task, description="Running OCR...")
+                ocr_result = VisionOCR.extract_text(screenshot.image_path)
+                progress.update(task, description=f"OCR finished (Confidence: {ocr_result.confidence:.2f}).")
+            else:
+                progress.update(task, description=f"Using vision ({model}), skipping OCR.")
+                ocr_result = OCRResult(text="", confidence=1.0, has_text=False)
 
-            if not ocr_result.has_text:
+            if not ocr_result.has_text and not use_vision:
                 console.print("[yellow]Warning: Little or no text was extracted from the window.[/yellow]")
             
-            if preview_context:
+            if preview_context and ocr_result.text:
                 console.print(Panel(ocr_result.text, title="OCR Context Preview", border_style="dim"))
 
             # 5. Build prompt and query LLM
             progress.update(task, description=f"Querying Ollama ({model})...")
-            prompt = PromptBuilder.build_prompt(question, ocr_result.text, target_window)
+            prompt = PromptBuilder.build_prompt(
+                question, 
+                ocr_result.text, 
+                target_window, 
+                has_image=use_vision
+            )
             
-            client = OllamaClient(model_name=model)
-            llm_response = client.query(prompt)
+            llm_response = client.query(
+                prompt, 
+                image_path=screenshot.image_path if use_vision else None
+            )
             progress.update(task, description="LLM query finished.")
 
         # 6. Print answer

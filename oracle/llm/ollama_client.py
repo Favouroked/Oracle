@@ -6,16 +6,19 @@ class OllamaClient:
     def __init__(self, model_name: str = "llama3"):
         self.model_name = model_name
 
-    def query(self, prompt: str) -> LLMResponse:
+    def query(self, prompt: str, image_path: Optional[str] = None) -> LLMResponse:
         """
         Sends a query to the local Ollama instance and returns the result.
         """
         try:
-            # Check if model exists (implicitly or explicitly)
-            # For simplicity, we'll try to chat directly
+            # Prepare message
+            message = {'role': 'user', 'content': prompt}
+            if image_path:
+                message['images'] = [image_path]
+
             response = ollama.chat(
                 model=self.model_name,
-                messages=[{'role': 'user', 'content': prompt}],
+                messages=[message],
                 options={'temperature': 0.1} # Lower temperature for more factual answers
             )
             
@@ -45,3 +48,13 @@ class OllamaClient:
             return [m.model for m in models_info.models]
         except Exception as e:
             raise RuntimeError(f"Failed to list Ollama models: {e}") from e
+
+    def is_vision_model(self) -> bool:
+        """
+        Check if the current model is a vision-capable model.
+        """
+        try:
+            model_details = ollama.show(self.model_name)
+            return "vision" in model_details.capabilities
+        except Exception:
+            return False
