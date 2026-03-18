@@ -23,8 +23,16 @@ Oracle is a local-first Python CLI tool designed for macOS. It uses native macOS
     cd Oracle
     ```
 
-2.  **Install & Setup:**
-    Using `uv`:
+2.  **Global Installation (Recommended):**
+    For a global installation that can be accessed from any terminal instance, run the provided installation script:
+    ```bash
+    chmod +x install.sh
+    ./install.sh
+    ```
+    This script will create a dedicated virtual environment in `~/.oracle-ai` and link the `oracle` command to your global path (e.g., `/usr/local/bin` or `~/.local/bin`).
+
+3.  **Local Installation (Using uv):**
+    If you prefer to use `uv` directly:
     ```bash
     uv sync
     # To use the 'oracle' command directly, you can install the package in editable mode:
@@ -32,7 +40,15 @@ Oracle is a local-first Python CLI tool designed for macOS. It uses native macOS
     ```
     Alternatively, you can run via `uv run oracle`.
 
-3.  **Permissions:**
+#### Uninstallation
+
+To remove Oracle AI from your system globally, run:
+```bash
+oracle uninstall
+```
+This will remove the installation directory and the global symlinks.
+
+#### Permissions
     On first run, macOS may prompt for permissions:
     -   **Screen Recording:** Required for capturing screenshots of selected windows.
     -   **Accessibility:** Required if you use the auto-typing feature (`--type-output`).

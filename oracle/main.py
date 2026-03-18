@@ -1,5 +1,9 @@
 import click
 import time
+import os
+import shutil
+import sys
+from pathlib import Path
 from typing import Optional
 from rich.console import Console
 from rich.table import Table
@@ -82,6 +86,61 @@ def list_models_cmd():
         )
 
     console.print(table)
+
+@cli.command(name="uninstall")
+def uninstall_cmd():
+    """Uninstall Oracle AI from your system."""
+    install_dir = Path.home() / ".oracle-ai"
+    
+    # Possible symlink locations
+    possible_symlinks = [
+        Path("/usr/local/bin/oracle"),
+        Path.home() / ".local/bin/oracle"
+    ]
+    
+    # Also check where 'oracle' command is currently pointing
+    oracle_path = shutil.which("oracle")
+    if oracle_path:
+        possible_symlinks.append(Path(oracle_path))
+    
+    # Remove duplicates
+    possible_symlinks = list(set(possible_symlinks))
+    
+    confirm = click.confirm("Are you sure you want to uninstall Oracle AI?", default=False)
+    if not confirm:
+        return
+
+    try:
+        # 1. Remove symlink(s)
+        for symlink_path in possible_symlinks:
+            if symlink_path.exists():
+                if symlink_path.is_symlink():
+                    target = os.readlink(symlink_path)
+                    if str(install_dir) in str(target):
+                        console.print(f"Removing symlink: {symlink_path}")
+                        try:
+                            os.remove(symlink_path)
+                        except PermissionError:
+                            console.print(f"[yellow]Permission denied. Attempting to remove {symlink_path} with sudo...[/yellow]")
+                            os.system(f"sudo rm {symlink_path}")
+                    else:
+                        console.print(f"[yellow]Symlink {symlink_path} exists but doesn't point to Oracle AI installation. Skipping.[/yellow]")
+                elif symlink_path.is_file() and str(install_dir) in str(symlink_path.resolve()):
+                    # It might be the actual binary if it's not a symlink but we are sure it's in our install_dir
+                    console.print(f"Removing binary: {symlink_path}")
+                    try:
+                        os.remove(symlink_path)
+                    except PermissionError:
+                        os.system(f"sudo rm {symlink_path}")
+        
+        # 2. Remove installation directory
+        if install_dir.exists():
+            console.print(f"Removing installation directory: {install_dir}")
+            shutil.rmtree(install_dir)
+            
+        console.print("[green]Oracle AI has been uninstalled successfully.[/green]")
+    except Exception as e:
+        console.print(f"[red]Error during uninstallation: {e}[/red]")
 
 def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
     """Interactively select a window from a list."""
