@@ -14,9 +14,8 @@ Oracle takes a screenshot of a specific window you select, extracts text using m
 
 ## Getting Started
 
-1.  **Prerequisites:** macOS, Python 3.13, [Ollama](https://ollama.com/), and `uv`.
-2.  **Installation:** `uv sync`
-3.  **Detailed Instructions:** See [docs/INSTALLATION.md](docs/INSTALLATION.md).
+1.  **Prerequisites:** macOS, Python 3.13 and [Ollama](https://ollama.com/).
+2.  **Detailed Instructions:** See [docs/INSTALLATION.md](docs/INSTALLATION.md).
 
 ## Usage Examples
 
