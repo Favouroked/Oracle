@@ -45,10 +45,43 @@ The primary command for asking questions based on a window's content.
     -   `--window-id [ID]`: Select the target window by its ID.
     -   `--window-index [INDEX]`: Select the target window by its index from `list-windows`.
     -   `--select`: Force interactive window selection even if IDs are available.
+    -   `--image-path [PATH]`: Manual path to an image file.
+    -   `--latest-screenshot` or `--last-screenshot`: Use the most recent screenshot from the Desktop.
     -   `--preview-context`: Display the text extracted from OCR before sending it to the model.
     -   `--type-output`: Ask the model for an answer and then offer to auto-type it back into the selected window.
     -   `--log-path [PATH]`: Customize the location of the history log. (Default: `oracle_history.jsonl`)
     -   `--verbose`: Show additional debug information during execution.
+
+---
+
+#### 3. `list-models`
+
+List all available local Ollama models and indicate if they support vision (image input).
+
+-   **Usage:**
+    ```bash
+    oracle list-models
+    ```
+
+---
+
+#### 4. `preview-context`
+
+Preview the text context extracted from a window, image, or screenshot without asking a question.
+
+-   **Usage:**
+    ```bash
+    oracle preview-context [OPTIONS]
+    ```
+
+-   **Options:**
+    -   `--window-id [ID]`: Select the target window by its ID.
+    -   `--window-index [INDEX]`: Select the target window by its index.
+    -   `--select`: Force interactive window selection.
+    -   `--image-path [PATH]`: Manual path to an image file.
+    -   `--latest-screenshot` or `--last-screenshot`: Use the most recent screenshot from the Desktop.
+    -   `--method [apple-vision | vision-model]`: Choose the OCR method (Default: `apple-vision`).
+    -   `--model [MODEL_NAME]`: Specify the vision model to use if method is `vision-model`.
 
 ---
 

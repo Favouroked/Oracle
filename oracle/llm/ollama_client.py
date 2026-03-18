@@ -39,15 +39,33 @@ class OllamaClient:
                 raise RuntimeError("Ollama server is not available. Please make sure Ollama is running.") from e
             raise RuntimeError(f"An error occurred while querying Ollama: {e}") from e
 
-    def list_models(self) -> list[str]:
+    def list_models_info(self) -> list[dict]:
         """
-        Lists available models in the local Ollama instance.
+        Lists available models with detailed info (e.g., vision capability).
         """
         try:
             models_info = ollama.list()
-            return [m.model for m in models_info.models]
+            detailed_models = []
+            for m in models_info.models:
+                # To check if vision capable, we need to show the model
+                # This can be slow if there are many models, but it's necessary
+                try:
+                    show_info = ollama.show(m.model)
+                    is_vision = "vision" in show_info.get("capabilities", [])
+                except Exception:
+                    is_vision = False
+                
+                detailed_models.append({
+                    "name": m.model,
+                    "is_vision": is_vision,
+                    "size": m.size,
+                    "family": m.details.family,
+                    "parameter_size": m.details.parameter_size,
+                    "quantization_level": m.details.quantization_level
+                })
+            return detailed_models
         except Exception as e:
-            raise RuntimeError(f"Failed to list Ollama models: {e}") from e
+            raise RuntimeError(f"Failed to list detailed Ollama models: {e}") from e
 
     def is_vision_model(self) -> bool:
         """
@@ -55,6 +73,6 @@ class OllamaClient:
         """
         try:
             model_details = ollama.show(self.model_name)
-            return "vision" in model_details.capabilities
+            return "vision" in model_details.get("capabilities", [])
         except Exception:
             return False

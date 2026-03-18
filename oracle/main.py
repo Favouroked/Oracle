@@ -1,4 +1,5 @@
 import click
+from typing import Optional
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
@@ -40,6 +41,47 @@ def list_windows_cmd():
 
     console.print(table)
 
+@cli.command(name="list-models")
+def list_models_cmd():
+    """List available local models and their capabilities."""
+    client = OllamaClient()
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
+        task = progress.add_task("Fetching models...", total=None)
+        try:
+            models = client.list_models_info()
+            progress.update(task, description="Models fetched.")
+        except Exception as e:
+            console.print(f"[red]Error fetching models: {e}[/red]")
+            return
+
+    if not models:
+        console.print("[yellow]No local Ollama models found.[/yellow]")
+        return
+
+    table = Table(title="Available Local Models")
+    table.add_column("Model Name", style="cyan")
+    table.add_column("Vision", justify="center")
+    table.add_column("Family", style="green")
+    table.add_column("Params", justify="right")
+    table.add_column("Size", justify="right")
+
+    for m in models:
+        vision_mark = "[bold green]✓[/bold green]" if m["is_vision"] else "[red]✗[/red]"
+        # Human readable size
+        size_mb = m["size"] / (1024 * 1024)
+        size_gb = size_mb / 1024
+        size_str = f"{size_gb:.1f} GB" if size_gb >= 1 else f"{size_mb:.0f} MB"
+        
+        table.add_row(
+            m["name"],
+            vision_mark,
+            m["family"],
+            m["parameter_size"],
+            size_str
+        )
+
+    console.print(table)
+
 def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
     """Interactively select a window from a list."""
     table = Table(title="Select a Window")
@@ -67,27 +109,8 @@ def select_window_interactively(windows: list[WindowInfo]) -> WindowInfo:
             
     return windows[idx]
 
-@cli.command(name="ask")
-@click.argument("question", required=False)
-@click.option("--model", default="qwen3.5:9b", help="Ollama model name.")
-@click.option("--window-id", type=int, help="Target window ID.")
-@click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
-@click.option("--select", is_flag=True, help="Interactively select a window.")
-@click.option("--preview-context", is_flag=True, help="Preview OCR text before LLM query.")
-@click.option("--type-output", is_flag=True, help="Enable auto-typing the result back into the window.")
-@click.option("--force-ocr", is_flag=True, help="Force OCR even if the model supports vision.")
-@click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
-@click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
-@click.option("--latest-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
-@click.option("--verbose", is_flag=True, help="Enable verbose output.")
-def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, image_path, latest_screenshot, verbose):
-    """Ask a question about a window's content or an image."""
-    
-    # 1. Get the question if not provided as argument
-    if not question:
-        question = click.prompt("Enter your question")
-        
-    # 2. Identify the target source
+def get_target_source(window_id, window_index, select, image_path, latest_screenshot) -> tuple[Optional[WindowInfo], Optional[ScreenshotResult]]:
+    """Identify the target source and return (window_info, screenshot)."""
     screenshot = None
     target_window = None
 
@@ -110,24 +133,51 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                     break
             if not target_window:
                 console.print(f"[red]Window ID {window_id} not found.[/red]")
-                return
+                return None, None
         elif window_index is not None:
             if 0 <= window_index < len(windows):
                 target_window = windows[window_index]
             else:
                 console.print(f"[red]Window index {window_index} out of range.[/red]")
-                return
+                return None, None
         elif select or not (window_id or window_index):
             if not windows:
                 console.print("[red]No active windows found to select from.[/red]")
-                return
+                return None, None
             target_window = select_window_interactively(windows)
             
         if not target_window:
             console.print("[red]No window selected.[/red]")
-            return
+            return None, None
             
         console.print(f"\n[bold blue]Selected Window:[/bold blue] {target_window.app_name} - {target_window.title or 'No Title'}")
+
+    return target_window, screenshot
+
+@cli.command(name="ask")
+@click.argument("question", required=False)
+@click.option("--model", default="qwen3.5:9b", help="Ollama model name.")
+@click.option("--window-id", type=int, help="Target window ID.")
+@click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
+@click.option("--select", is_flag=True, help="Interactively select a window.")
+@click.option("--preview-context", is_flag=True, help="Preview OCR text before LLM query.")
+@click.option("--type-output", is_flag=True, help="Enable auto-typing the result back into the window.")
+@click.option("--force-ocr", is_flag=True, help="Force OCR even if the model supports vision.")
+@click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
+@click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
+@click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
+@click.option("--verbose", is_flag=True, help="Enable verbose output.")
+def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, image_path, latest_screenshot, verbose):
+    """Ask a question about a window's content or an image."""
+    
+    # 1. Get the question if not provided as argument
+    if not question:
+        question = click.prompt("Enter your question")
+        
+    # 2. Identify the target source
+    target_window, screenshot = get_target_source(window_id, window_index, select, image_path, latest_screenshot)
+    if not target_window and not screenshot:
+        return
 
     try:
         # 3. Get the screenshot (either existing or capture it)
@@ -220,6 +270,58 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             logger.log(log_entry)
         except:
             pass
+
+@cli.command(name="preview-context")
+@click.option("--window-id", type=int, help="Target window ID.")
+@click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
+@click.option("--select", is_flag=True, help="Interactively select a window.")
+@click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
+@click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
+@click.option("--method", type=click.Choice(["apple-vision", "vision-model"]), default="apple-vision", help="OCR method to use.")
+@click.option("--model", default="llava:7b", help="Vision model to use if method is 'vision-model'.")
+def preview_context_cmd(window_id, window_index, select, image_path, latest_screenshot, method, model):
+    """Preview the text context extracted from a window or image."""
+    target_window, screenshot = get_target_source(window_id, window_index, select, image_path, latest_screenshot)
+    if not target_window and not screenshot:
+        return
+
+    try:
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
+            if not screenshot:
+                task = progress.add_task("Capturing window...", total=None)
+                screenshot = WindowCapturer.capture_window(target_window)
+                progress.update(task, description="Window captured.")
+            else:
+                task = progress.add_task("Loading image context...", total=None)
+                progress.update(task, description=f"Using image: {screenshot.image_path}")
+
+            extracted_text = ""
+            if method == "apple-vision":
+                progress.update(task, description="Running Apple Vision OCR...")
+                ocr_result = VisionOCR.extract_text(screenshot.image_path)
+                extracted_text = ocr_result.text
+                progress.update(task, description=f"OCR finished (Confidence: {ocr_result.confidence:.2f}).")
+            else:
+                progress.update(task, description=f"Querying vision model ({model}) for OCR...")
+                client = OllamaClient(model_name=model)
+                if not client.is_vision_model():
+                    raise ValueError(f"Model '{model}' is not vision-capable.")
+                
+                prompt = "Transcribe all the text visible in this image. Output only the transcribed text, nothing else. If there is no text, output an empty string."
+                llm_response = client.query(prompt, image_path=screenshot.image_path)
+                extracted_text = llm_response.answer
+                progress.update(task, description="Vision model OCR finished.")
+
+        if extracted_text:
+            console.print("\n", Panel(extracted_text, title=f"Extracted Context ({method})", border_style="dim"))
+        else:
+            console.print("\n[yellow]No text could be extracted.[/yellow]")
+
+        # Cleanup if temporary
+        WindowCapturer.cleanup(screenshot)
+
+    except Exception as e:
+        console.print(f"\n[bold red]Error:[/bold red] {e}")
 
 if __name__ == "__main__":
     cli()
