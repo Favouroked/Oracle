@@ -6,19 +6,23 @@ class OllamaClient:
     def __init__(self, model_name: str = "qwen3.5:9b"):
         self.model_name = model_name
 
-    def query(self, prompt: str, image_path: Optional[str] = None) -> LLMResponse:
+    def query(self, prompt: str = None, image_path: Optional[str] = None, messages: Optional[list[dict]] = None) -> LLMResponse:
         """
         Sends a query to the local Ollama instance and returns the result.
         """
         try:
-            # Prepare message
-            message = {'role': 'user', 'content': prompt}
-            if image_path:
-                message['images'] = [image_path]
+            # Prepare messages
+            if messages is None:
+                if prompt is None:
+                    raise ValueError("Either 'prompt' or 'messages' must be provided.")
+                message = {'role': 'user', 'content': prompt}
+                if image_path:
+                    message['images'] = [image_path]
+                messages = [message]
 
             response = ollama.chat(
                 model=self.model_name,
-                messages=[message],
+                messages=messages,
                 options={'temperature': 0.1} # Lower temperature for more factual answers
             )
             

@@ -3,6 +3,7 @@ import time
 import os
 import shutil
 import sys
+import uuid
 from pathlib import Path
 from typing import Optional
 from rich.console import Console
@@ -226,8 +227,9 @@ def get_target_source(window_id, window_index, select, image_path, latest_screen
 @click.option("--log-path", default="oracle_history.jsonl", help="Path to history log.")
 @click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
 @click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
+@click.option("--thread", is_flag=True, help="Continue the chat based on the LLM's reply.")
 @click.option("--verbose", is_flag=True, help="Enable verbose output.")
-def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, image_path, latest_screenshot, verbose):
+def ask_cmd(question, model, window_id, window_index, select, preview_context, type_output, force_ocr, log_path, image_path, latest_screenshot, thread, verbose):
     """Ask a question about a window's content or an image."""
     
     # 1. Get the question if not provided as argument
@@ -281,54 +283,83 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                 has_image=use_vision
             )
             
-            llm_response = client.query(
-                prompt, 
-                image_path=screenshot.image_path if use_vision else None
-            )
+            messages = [{'role': 'user', 'content': prompt}]
+            if use_vision:
+                messages[0]['images'] = [screenshot.image_path]
+            
+            llm_response = client.query(messages=messages)
             progress.update(task, description=f"LLM query finished in {llm_response.total_duration_seconds:.2f}s.")
 
-        # 6. Print answer
-        console.print("\n", Panel(llm_response.answer, title=f"Oracle Answer ({model})", subtitle=f"Time: {llm_response.total_duration_seconds:.2f}s", border_style="green"))
+        # 6. Handle response, logging, and potential thread loop
+        thread_id = str(uuid.uuid4()) if thread else None
+        current_question = question
+        
+        while True:
+            # Print answer
+            console.print("\n", Panel(llm_response.answer, title=f"Oracle Answer ({model})", subtitle=f"Time: {llm_response.total_duration_seconds:.2f}s", border_style="green"))
 
-        # 7. Log interaction
-        logger = InteractionLogger(log_path=log_path)
-        log_entry = InteractionLog(
-            window_info=target_window or screenshot.window_info,
-            question=question,
-            model=model,
-            ocr_text_excerpt=ocr_result.text[:500] + "..." if len(ocr_result.text) > 500 else ocr_result.text,
-            response=llm_response.answer,
-            auto_typing_requested=type_output,
-            status="success",
-            total_duration_seconds=llm_response.total_duration_seconds
-        )
-        logger.log(log_entry)
-        
-        # 8. Cleanup screenshot if temporary
+            # 7. Log interaction
+            logger = InteractionLogger(log_path=log_path)
+            log_entry = InteractionLog(
+                window_info=target_window or screenshot.window_info,
+                question=current_question,
+                model=model,
+                ocr_text_excerpt=ocr_result.text[:500] + "..." if len(ocr_result.text) > 500 else ocr_result.text,
+                response=llm_response.answer,
+                auto_typing_requested=type_output,
+                status="success",
+                total_duration_seconds=llm_response.total_duration_seconds,
+                thread_id=thread_id
+            )
+            logger.log(log_entry)
+            
+            # 8. Optional auto-typing (only if we have a target window)
+            if type_output and (target_window or screenshot.window_info):
+                win = target_window or screenshot.window_info
+                injector = OutputInjector()
+                injector.confirm_and_type(llm_response.answer, win.app_name)
+            elif type_output:
+                console.print("[yellow]Warning: Auto-typing requested but no target window is available.[/yellow]")
+
+            if not thread:
+                break
+            
+            # 9. Thread loop follow-up
+            next_question = click.prompt("\n[bold cyan]Follow-up[/bold cyan] (or /q to quit)", default="/q")
+            if next_question.strip().lower() == "/q":
+                break
+            
+            # Update messages with history
+            messages.append({'role': 'assistant', 'content': llm_response.answer})
+            messages.append({'role': 'user', 'content': next_question})
+            current_question = next_question
+            
+            # Query again for follow-up
+            with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
+                task = progress.add_task(f"Querying Ollama ({model})...", total=None)
+                llm_response = client.query(messages=messages)
+                progress.update(task, description=f"LLM query finished in {llm_response.total_duration_seconds:.2f}s.")
+
+        # 10. Cleanup screenshot if temporary
         WindowCapturer.cleanup(screenshot)
-        
-        # 9. Optional auto-typing (only if we have a target window)
-        if type_output and (target_window or screenshot.window_info):
-            win = target_window or screenshot.window_info
-            injector = OutputInjector()
-            injector.confirm_and_type(llm_response.answer, win.app_name)
-        elif type_output:
-            console.print("[yellow]Warning: Auto-typing requested but no target window is available.[/yellow]")
 
     except Exception as e:
         console.print(f"\n[bold red]Error:[/bold red] {e}")
         # Log failure if we have enough info
         try:
             logger = InteractionLogger(log_path=log_path)
+            # Use locals() to safely get variables that might not have been initialized
+            current_vars = locals()
             log_entry = InteractionLog(
                 window_info=target_window or (screenshot.window_info if screenshot else None),
-                question=question,
+                question=current_vars.get('current_question', question),
                 model=model,
                 ocr_text_excerpt="",
                 response="",
                 auto_typing_requested=type_output,
                 status="error",
-                error_message=str(e)
+                error_message=str(e),
+                thread_id=current_vars.get('thread_id')
             )
             logger.log(log_entry)
         except:

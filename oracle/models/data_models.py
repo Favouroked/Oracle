@@ -37,3 +37,4 @@ class InteractionLog(BaseModel):
     status: str
     total_duration_seconds: float = Field(0.0, description="Total time taken for the LLM request in seconds")
     error_message: Optional[str] = None
+    thread_id: Optional[str] = None
