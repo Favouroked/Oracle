@@ -15,7 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from oracle.window.enumerator import WindowEnumerator
 from oracle.capture.capture_window import WindowCapturer
 from oracle.ocr.vision_ocr import VisionOCR
-from oracle.llm.ollama_client import OllamaClient
+from oracle.llm.llm_factory import create_llm_client
 from oracle.llm.prompt_builder import PromptBuilder
 from oracle.history.interaction_logger import InteractionLogger
 from oracle.typing.injector import OutputInjector
@@ -218,7 +218,7 @@ def get_target_source(window_id, window_index, select, image_path, latest_screen
 
 @cli.command(name="ask")
 @click.argument("question", required=False)
-@click.option("--model", default="qwen3.5:4b", help="Ollama model name.")
+@click.option("--model", default="qwen3.5:4b", help="Model name. Supports Ollama models, claude-* (Anthropic), and gpt-*/o*-* (OpenAI).")
 @click.option("--window-id", type=int, help="Target window ID.")
 @click.option("--window-index", type=int, help="Target window index from 'list-windows'.")
 @click.option("--select", is_flag=True, help="Interactively select a window.")
@@ -254,7 +254,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                 progress.update(task, description=f"Using image: {screenshot.image_path}")
 
             # 4. Determine if we should use vision or OCR
-            client = OllamaClient(model_name=model)
+            client = create_llm_client(model)
             use_vision = client.is_vision_model() and not force_ocr
             
             ocr_result = None
@@ -276,7 +276,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
                 console.print(Panel(ocr_result.text, title="OCR Context Preview", border_style="dim"))
 
             # 5. Build prompt and query LLM
-            progress.update(task, description=f"Querying Ollama ({model})...")
+            progress.update(task, description=f"Querying {model}...")
             prompt = PromptBuilder.build_prompt(
                 question, 
                 ocr_result.text, 
@@ -337,7 +337,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
             
             # Query again for follow-up
             with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), console=console) as progress:
-                task = progress.add_task(f"Querying Ollama ({model})...", total=None)
+                task = progress.add_task(f"Querying {model}...", total=None)
                 llm_response = client.query(messages=messages)
                 progress.update(task, description=f"LLM query finished in {llm_response.total_duration_seconds:.2f}s.")
 
@@ -373,7 +373,7 @@ def ask_cmd(question, model, window_id, window_index, select, preview_context, t
 @click.option("--image-path", type=click.Path(exists=True), help="Manual path to an image file.")
 @click.option("--latest-screenshot", "--last-screenshot", is_flag=True, help="Use the latest screenshot from the Desktop folder.")
 @click.option("--method", type=click.Choice(["apple-vision", "vision-model"]), default="apple-vision", help="OCR method to use.")
-@click.option("--model", default="qwen3.5:4b", help="Vision model to use if method is 'vision-model'.")
+@click.option("--model", default="qwen3.5:4b", help="Vision model to use if method is 'vision-model'. Supports Ollama, claude-*, and gpt-*/o*-* models.")
 def preview_context_cmd(window_id, window_index, select, image_path, latest_screenshot, method, model):
     """Preview the text context extracted from a window or image."""
     target_window, screenshot = get_target_source(window_id, window_index, select, image_path, latest_screenshot)
@@ -400,7 +400,7 @@ def preview_context_cmd(window_id, window_index, select, image_path, latest_scre
                 progress.update(task, description=f"OCR finished in {duration:.2f}s (Confidence: {ocr_result.confidence:.2f}).")
             else:
                 progress.update(task, description=f"Querying vision model ({model}) for OCR...")
-                client = OllamaClient(model_name=model)
+                client = create_llm_client(model)
                 if not client.is_vision_model():
                     raise ValueError(f"Model '{model}' is not vision-capable.")
                 
